@@ -153,5 +153,15 @@ def train_rl_model(episodes):
 
 
 train_rl_model(100) # Placeholder for number of episodes to train the model
+
+
+
+"""
+Todo:
+
+2/16
+Make a function or seperate file maybe for running the model without training it
+
+"""
        
 
