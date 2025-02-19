@@ -13,7 +13,7 @@ class Enforcer:
         self.pdk = pdk
         self.mapped_pdk = MappedPDK(pdk, sky130_mapped_pdk)
         self.drc_script = "run_drc.sh"
-        self.drc_output_file = "drc.out"
+        self.drc_output_file = "drc.out" #Make sure drc is being saved to this file from script
         # self.lvs/pex_script = 
         # self.lvs/pex_output_file =
 
@@ -28,9 +28,9 @@ class Enforcer:
         if result.stderr:
             raise RuntimeError(f"Error running DRC: {result.stderr}")
         
-        return self.parse_drc_output()
+        return drc_output_file #Make sure the drc output is saving to "drc.out" or some other type of file
 
-    def parse_drc_output(self):
+    def drc_num(self):
 
         if not os.path.exists(self.drc_output_file):
             raise FileNotFoundError(f"File {self.drc_output_file} not found")
@@ -53,7 +53,8 @@ class Enforcer:
         return 1 / (1 + errors)
     
     def enforce(self, gds_file):
-        errors = self.run_drc_check(gds_file)
+        run_drc_check(gds_file)
+        errors = self.drc_num()
         return self.reward(errors)
 
 
