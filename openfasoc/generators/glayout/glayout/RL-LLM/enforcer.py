@@ -55,9 +55,6 @@ class Enforcer:
         return 1 / (1 + errors)
     
 
-
-
-    
     def enforce(self, gds_file):
 
         #This is essentially the main function that will be called in the RL model
