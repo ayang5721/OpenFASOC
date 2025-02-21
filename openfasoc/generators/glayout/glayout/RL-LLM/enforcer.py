@@ -12,6 +12,7 @@ class Enforcer:
     def __init__(self, pdk: Pdk):
         self.pdk = pdk
         self.mapped_pdk = MappedPDK(pdk, sky130_mapped_pdk)
+        self.errors = 0
         self.drc_script = "run_drc.sh"
         self.drc_output_file = "drc.out" #Make sure drc is being saved to this file from script
         # self.lvs/pex_script = 
@@ -28,7 +29,8 @@ class Enforcer:
         if result.stderr:
             raise RuntimeError(f"Error running DRC: {result.stderr}")
         
-        return drc_output_file #Make sure the drc output is saving to "drc.out" or some other type of file
+        return result #Make sure the drc output is saving to "drc.out" or some other type of file
+        #result should be a file
 
     def drc_num(self):
 
@@ -52,9 +54,16 @@ class Enforcer:
     def reward(self, errors):
         return 1 / (1 + errors)
     
+
+
+
+    
     def enforce(self, gds_file):
-        run_drc_check(gds_file)
-        errors = self.drc_num()
-        return self.reward(errors)
+
+        #This is essentially the main function that will be called in the RL model
+
+        self.drc_output_file = run_drc_check(gds_file)
+        self.errors = self.drc_num()
+        return self.reward(self.errors)
 
 
