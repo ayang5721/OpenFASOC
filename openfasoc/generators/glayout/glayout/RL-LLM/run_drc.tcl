@@ -1,21 +1,9 @@
-# gds read ./results/sky130hd/tempsense/6_final.gds
-# load tempsenseInst
-# flatten drc_cell
-# load drc_cell
-
-
-# if { [info exists ::env(TECH)] } {
-#   tech load $::env(TECH)
-# }
-
 # gds flatglob commands removes the drc errors caused by hierarchy that magic can't process.
-# gds faltglob *capacitor_test_nf* is specific to ldo-gen
 gds flatglob *$$*
 gds flatglob *VIA*
 gds flatglob *CDNS*
-gds flatglob *capacitor_test_nf*
 
-gds read $::env(RESULTS_DIR)/6_final.gds
+gds read test.gds
 proc custom_drc_save_report {{cellname ""} {outfile ""}} {
 
     if {$outfile == ""} {set outfile "drc.out"}
@@ -65,4 +53,4 @@ proc custom_drc_save_report {{cellname ""} {outfile ""}} {
     puts "\[INFO\]: DONE with $outfile\n"
 }
 
-custom_drc_save_report $::env(DESIGN_NAME) $::env(REPORTS_DIR)/6_final_drc.rpt
+custom_drc_save_report $::env(CELL_NAME) drc.rpt
