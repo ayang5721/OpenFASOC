@@ -28,24 +28,36 @@ class QNetwork(nn.Module):
 class Model:
     def __init__(self):
         model_name = "bigcode/starcoder"
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
-        model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
 
     def generate_code(self, prompt):
         inputs = self.tokenizer(prompt, return_tensors="pt")
         outputs = self.model.generate(**inputs, max_length=100)
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    def save_model(agent, filename = "rl_model.pth"):
-        torch.save(agent.state_dict(), filename)
-        print(f"Model saved to {filename}")
 
-    def load_model(agent, filename = "rl_model.pth"):
+    def save_checkpoint(self, q_network, optimizer, epsilon, episode, filename="rl_checkpoint.pth"):
+        torch.save({
+            'q_network_state_dict': q_network.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'epsilon': epsilon,
+            'episode': episode
+        }, filename)
+        print(f"Checkpoint saved to {filename}")
+
+    def load_checkpoint(self, q_network, optimizer, filename="rl_checkpoint.pth"):
+        epsilon, episode = 0.1, 0
         if os.path.exists(filename):
-            agent.load_state_dict(torch.load(filename))
-            print(f"Model loaded from {filename}")
+            checkpoint = torch.load(filename)
+            q_network.load_state_dict(checkpoint['q_network_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            epsilon = checkpoint.get('epsilon', 0.1)
+            episode = checkpoint.get('episode', 0)
+            print(f"Checkpoint loaded from {filename}")
         else:
-            print(f"Model file {filename} not found")
+            print("No checkpoint found")
+        
+        return epsilon, episode
 
     
 
@@ -56,8 +68,12 @@ class CircuitEnvironment:
         self.agent = Model()
         self.state_size = 10 # Placeholder for the number of parameters in the state
         self.action_size = 10 # Placeholder for the number of actions
+
         self.q_network = QNetwork(self.state_size, self.action_size)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=0.001)
+
+        self.epsilon, self.episode = self.agent.load_checkpoint(self.q_network, self.optimizer)
+
         self.memory = deque(maxlen=1000)
         self.epsilon = 0.1
         self.epsilon_decay = 0.995
@@ -140,10 +156,6 @@ class CircuitEnvironment:
         p_width = 1
         functionTester_cell(sky130_mapped_pdk, n_width, p_width).write_gds("functionTester.gds")
         """
-
-
-
-
         try:
             exec(open(glayout_file).read())
         except Exception as e:
@@ -157,8 +169,15 @@ class CircuitEnvironment:
         gds_file = "GDS" # placeholder for the actual gds file. This code needs to be written
 
 
-        errors = self.enforcer.drc_num() # gds_file is a placeholder for the gds_file generated from running the glayout code of the LLM
-        reward = self.enforcer.enforce(gds_file) # gds_file is a placeholder for the gds_file generated from running the glayout code of the LLM
+        # repeat this block for lvs and pex too
+        drc_report = self.enforcer.enforce(gds_file, str(glayout_file))
+        drc_errors = self.enforcer.drc_num()
+
+        # Weight errors if needed
+        errors = drc_errors # + lvs_errors + pex_errors
+        reward = - errors ** 2
+        if errors == 0:
+            reward = 1
 
         # action update
         key = f"{action['component'].lower()}_{action['parameter']}"
@@ -206,8 +225,12 @@ class CircuitEnvironment:
 
 def train_rl_model(episodes):
 
-    environment = CircuitEnvironment(10) 
-    environment.agent.load_model(environment.agent)
+    environment = CircuitEnvironment()
+    episodes = environment.episode
+
+    input (f"Do you want to reset episodes to 0? Currently episodes are {episodes}. Enter 'y' to reset or any other key to continue: ")
+    if input == 'y':
+        episodes = 0
 
     for episode in range(episodes):
         state = environment.reset()
@@ -227,14 +250,18 @@ def train_rl_model(episodes):
         environment.epsilon = max(environment.epsilon_min, environment.epsilon * environment.epsilon_decay)
         print(f"Episode {episode + 1} Total Reward: {total_reward} Epsilon: {environment.epsilon}")
 
-        environment.agent.save_model(environment.agent)
+        environment.agent.save_checkpoint(
+            environment.q_network,
+            environment.optimizer,
+            environment.epsilon,
+            episode + 1
+        )
 
     print("Training complete")
 
 def run_model():
     
-    environment = CircuitEnvironment(10) # Same comment as above. 10 is currently a placeholder for the true action space.
-    environment.agent.load_model(environment.agent)
+    environment = CircuitEnvironment()
 
     glayout_output_folder = "glayout_output_folder"
     if not os.path.exists(glayout_output_folder):
@@ -243,11 +270,21 @@ def run_model():
     prompt = input("Enter a prompt: ")
     glayout_code = environment.agent.generate_code(prompt)
 
+    name = input("Enter a name for the circuit or enter 1 to auto name: ")
     while True:
-        time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        glayout_file = f"{self.glayout_output_folder}/circuit_{time}.py"
-        if not os.path.exists(glayout_file):
-            break
+        if name == 1:
+            time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            glayout_file = f"{glayout_output_folder}/circuit_{time}.py"
+            if not os.path.exists(glayout_file):
+                break
+        else:
+            glayout_file = f"{glayout_output_folder}/{name}.py"
+            if os.path.exists(glayout_file):
+                print("File already exists. Please enter a different name or enter 1 to auto name.") 
+            else:
+                break
+
+            name = input()
 
     with open(glayout_file, "w") as f:
         f.write(glayout_code)
@@ -255,7 +292,7 @@ def run_model():
     print(f"Generated glayout code saved to {glayout_file}")
 
 
-train_rl_model(100) # Placeholder for number of episodes to train the model
+# train_rl_model(100) # Placeholder for number of episodes to train the model
 
 """
 Todo: lots of stuff to fix with intereactions between enforcer.py and model.py
