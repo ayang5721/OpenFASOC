@@ -327,11 +327,14 @@ def run_model():
 # train_rl_model(100) # Placeholder for number of episodes to train the model
 
 """
-Todo: lots of stuff to fix with intereactions between enforcer.py and model.py
-        context files for glayout and circutry
-        updating the action type/space for the model - updated now check this
-        categorize all types of errors
-        lvs/pex error checkers
+Todo: 
+
+
+        action space
+        context files
+        google cloud machine setup/running
+        gds file generation
+        lvs and pex
 """
        
 
