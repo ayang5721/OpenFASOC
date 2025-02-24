@@ -35,6 +35,30 @@ class Model:
         inputs = self.tokenizer(prompt, return_tensors="pt")
         outputs = self.model.generate(**inputs, max_length=100)
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    def generate_code(self, circuit, prompt):
+        """
+        Generates modified code based on an existing circuit and a prompt.
+
+        Args:
+            circuit (str): The existing circuit code as a string.
+            prompt (str): The instruction for modification.
+
+        Returns:
+            str: The modified circuit code.
+        """
+        full_prompt = f"""
+        Modify the following circuit code based on this instruction: '{prompt}'
+
+        Circuit Code:
+        {circuit}
+
+        Provide the complete modified circuit code:
+        """
+        inputs = self.tokenizer(full_prompt, return_tensors="pt")
+        outputs = self.model.generate(**inputs, max_length=500)
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
 
     def save_checkpoint(self, q_network, optimizer, epsilon, episode, filename="rl_checkpoint.pth"):
         torch.save({
@@ -110,13 +134,14 @@ class CircuitEnvironment:
 
         return self.state
     
-    def sample_action(elf):
+    def sample_action(self):
         action = {
             "operation": random.choice(["modify_width", "modify_length", "modify_finger", "add_dummy", "add_tie", "add_substrate_tap", "smart_route", "place"]),
             "component": random.choice(["nmos", "pmos"]),
             "parameter": random.choice(["width", "length", "finger"]),
             "value": random.uniform(-1.0,1.0)
         }
+        return action
 
     def select_action(self, state):
         if random.random() <= self.epsilon:
@@ -267,8 +292,15 @@ def run_model():
     if not os.path.exists(glayout_output_folder):
         os.makedirs(glayout_output_folder, exist_ok=True)
     
+    circuit = input("Enter the path to the existing circuit code or enter n to not edit an existing circuit: ")
     prompt = input("Enter a prompt: ")
-    glayout_code = environment.agent.generate_code(prompt)
+
+    if circuit == "n":
+        glayout_code = environment.agent.generate_code(prompt)
+    else:
+        with open(circuit, "r") as f:
+            circuit_code = f.read()
+        glayout_code = environment.agent.generate_code(circuit_code, prompt)
 
     name = input("Enter a name for the circuit or enter 1 to auto name: ")
     while True:
