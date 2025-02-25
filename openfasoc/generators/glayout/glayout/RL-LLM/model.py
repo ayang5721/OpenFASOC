@@ -128,7 +128,6 @@ class CircuitEnvironment:
             "with_tie": with_tie,
             "with_dummy": with_dummy,
             "smart_route": smart_route,
-            
         )
         """
 
@@ -139,7 +138,7 @@ class CircuitEnvironment:
             "operation": random.choice(["modify_width", "modify_length", "modify_finger", "add_dummy", "add_tie", "add_substrate_tap", "smart_route", "place"]),
             "component": random.choice(["nmos", "pmos"]),
             "parameter": random.choice(["width", "length", "finger"]),
-            "value": random.uniform(-1.0,1.0)
+            "value": np.random.uniform(-1.0, 1.0)
         }
         return action
 
@@ -225,11 +224,13 @@ class CircuitEnvironment:
             f.write(glayout_code)
 
     def optimize_model(self):
+        #Check this function with gpt
+
         if len(self.memory) < 64:
             return #insufficient sample num
 
         batch = random.sample(self.memory, 64)
-        states, actions, rewards, next_states, dones = zip(*batch)
+        states, actions, rewards, next_states, dones = zip(*batch) # actions is currently not used. Check if this is right or wrong
 
         states = torch.FloatTensor(states)
         rewards = torch.FloatTensor(rewards)
