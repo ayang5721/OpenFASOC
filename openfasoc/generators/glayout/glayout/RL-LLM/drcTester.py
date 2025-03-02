@@ -45,8 +45,6 @@ def run_drc(
             stderr=logfile
         )
 
-        print()
-
     return open(path.join(runs_dir_path, 'drc.rpt')).read()
 
 if __name__ == "__main__":
