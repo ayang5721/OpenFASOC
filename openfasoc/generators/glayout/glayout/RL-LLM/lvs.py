@@ -28,7 +28,7 @@ def run_pex(
         makedirs(runs_dir_path)
 
     shutil.copy(gds_path, path.join(runs_dir_path, 'pex.gds'))
-commands_file_path = path.join(runs_dir_path, 'run_pex.tcl')
+    commands_file_path = path.join(runs_dir_path, 'run_pex.tcl')
 
     pex_script = f"""
     gds flatglob *\$\$*
