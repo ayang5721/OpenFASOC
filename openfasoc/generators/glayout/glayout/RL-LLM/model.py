@@ -151,22 +151,24 @@ class CircuitEnvironment:
          the 10 represents 10 dimension vector (each dimension is a parameter such as width)
          This has to be changed to some sort of list that has parameters WITH VALUES
         Right now the random is a placeholder for states
-
-        self.state = (
-            "nmos_width": nmos_width,
-            "pmos_width": pmos_width,
-            "nmos_length": nmos_length,
-            "pmos_length": pmos_length,
-            "nmos_finger": nmos_finger,
-            "pmos_finger": pmos_finger,
-            "rmult": rmult,
-            "multipliers": multipliers,
-            "with_substrate_tap": with_substrate_tap,
-            "with_tie": with_tie,
-            "with_dummy": with_dummy,
-            "smart_route": smart_route,
-        )
         """
+
+        #Check to make sure this is correct state
+        self.state = {
+            "nmos_width": 1,
+            "pmos_width": 1,
+            "nmos_length": 1,
+            "pmos_length": 1,
+            "nmos_finger": 1,
+            "pmos_finger": 1,
+            "rmult": False,
+            "multipliers": False,
+            "with_substrate_tap": False,
+            "with_tie": False,
+            "with_dummy": False,
+            "smart_route": False
+        }
+        
 
         return self.state
     
@@ -181,7 +183,13 @@ class CircuitEnvironment:
 
     def select_action(self, state):
         if random.random() <= self.epsilon:
-            return self.sample_action()
+            action = self.sample_action()
+            if action['operation'] in ("add_dummy", "add_tie", "add_substrate_tap", "smart_route", "place"):
+                if action['value'] <= 0:
+                    action['value'] = False
+                else:
+                    action['value'] = True
+            return action 
         else:
             state_tensor = torch.FloatTensor(list(state.values())).unsqueeze(0)
             with torch.no_grad():
@@ -193,7 +201,11 @@ class CircuitEnvironment:
         operation = ["modify_width", "modify_length", "modify_finger", "add_dummy", "add_tie", "add_substrate_tap", "smart_route", "place"]
         component = ["nmos", "pmos"]
         parameter = ["width", "length", "finger"]
+
+        #Change this so the LLM decides value, not randomness
         value = np.random.uniform(-1.0, 1.0)
+
+
         return {
             "operation": operation[action_index % len(operation)],
             "component": component[(action_index // len(operation)) % len(component)],
@@ -216,16 +228,22 @@ class CircuitEnvironment:
             raise ValueError(f"Error executing {glayout_file}: {e}")
         
 
+        # Make sure gds file has correct path
         gds_file = f"{self.gds_output_folder}/circuit_{timestamp}.gds"
 
 
-        # repeat this block for lvs and pex too
-        drc_report = self.enforcer.enforce(gds_file, str(glayout_file))
+        drc_report = self.enforcer.enforce_drc(gds_file, f"DRC_{glayout_file.replace('.py', '.rpt')}")
         drc_errors = self.enforcer.drc_num()
 
+        pex_report = self.enforcer.enforce_pex(gds_file, f"PEX_{glayout_file.replace('.py', '.rpt')}")
+        pex_errors = self.enforcer.pex_num()
+
+        lvs_report = self.enforcer.enforce_lvs(gds_file, f"LVS_{glayout_file.replace('.py', '.rpt')}")
+        lvs_errors = self.enforcer.lvs_num()
+
         # Weight errors if needed
-        errors = drc_errors # + lvs_errors + pex_errors
-        reward = - errors ** 2
+        errors = drc_errors + lvs_errors + pex_errors
+        reward = - (errors ** 2)
         if errors == 0:
             reward = 1
 
@@ -250,7 +268,7 @@ class CircuitEnvironment:
             f.write(glayout_code)
 
     def optimize_model(self):
-        #Check this function with gpt
+        #Check this function with gpt, change this function to truly optimize (mayve using error reports?)
 
         if len(self.memory) < 64:
             return #insufficient sample num
@@ -361,7 +379,8 @@ Todo:
         context files
         google cloud machine setup/running
         gds file generation
-        lvs and pex
+       
+        # Comments are things that need to be checked/fixed
 """
        
 
