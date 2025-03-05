@@ -16,7 +16,7 @@ def run_pex(
         - `gds_path`: Path to the GDS file
         - `cell_name`: Name of the cell to extract
         - `pdk_magicrc_file`: Path to the `.magicrc` file
-- `full_extraction`: Whether to run full RC extraction
+        - `full_extraction`: Whether to run full RC extraction
         - `flatten`: Whether to flatten the netlist
     """
 
@@ -28,14 +28,14 @@ def run_pex(
         makedirs(runs_dir_path)
 
     shutil.copy(gds_path, path.join(runs_dir_path, 'pex.gds'))
-commands_file_path = path.join(runs_dir_path, 'run_pex.tcl')
+    commands_file_path = path.join(runs_dir_path, 'run_pex.tcl')
 
     pex_script = f"""
     gds flatglob *\$\$*
     gds read pex.gds
 
     {f'flatten {cell_name}' if flatten else ''}
-load {cell_name}
+    load {cell_name}
     select top cell
 
     extract do local
