@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from enforcer import Enforcer
 from collections import deque
 
-# uncomment this line for a Syntax error so this file cannot run since it auto starts a very large gb download (starcoder LLM from huggingface)
+# INFO uncomment this line for a Syntax error so this file cannot run since it auto starts a very large gb download (starcoder LLM from huggingface)
 
 class QNetwork(nn.Module):
     def __init__(self, state_size, action_size, hidden_size = 64):
@@ -27,6 +27,8 @@ class QNetwork(nn.Module):
 
 class Model:
     def __init__(self):
+
+        # find a way to make sure starcoder downloads to google cloud machine
         model_name = "bigcode/starcoder"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
@@ -228,10 +230,21 @@ class CircuitEnvironment:
             raise ValueError(f"Error executing {glayout_file}: {e}")
         
 
-        # Make sure gds file has correct path
-        gds_file = f"{self.gds_output_folder}/circuit_{timestamp}.gds"
+        with open(glayout_file, "r", encoding = "utf-8") as f:
+            for line in reversed(list(f)):
+                if ".gds" in line:
+                    gds_file = line.split(".gds")[0].split("(")[-1].strip("\"'") + ".gds"
+                    break
+        
+        if gds_file is None:
+            raise ValueError("GDS file not found (step)")
 
 
+        """
+        The drc/lvs/pex reports will be used as step by step context for the model to learn from
+        This type of context needs to be implemented after initial pure-reward training so the model can first stabilize and avoid training errors
+        Find a way to do this - gpt
+        """
         drc_report = self.enforcer.enforce_drc(gds_file, f"DRC_{glayout_file.replace('.py', '.rpt')}")
         drc_errors = self.enforcer.drc_num()
 
@@ -247,7 +260,7 @@ class CircuitEnvironment:
         if errors == 0:
             reward = 1
 
-        # action update
+        # INFO action update
         key = f"{action['component'].lower()}_{action['parameter']}"
         if key in self.state:
             self.state[key] += action['value']
@@ -268,10 +281,10 @@ class CircuitEnvironment:
             f.write(glayout_code)
 
     def optimize_model(self):
-        #Check this function with gpt, change this function to truly optimize (mayve using error reports?)
+        #Check this function with gpt, change this function to truly optimize (maybe using error reports?)
 
         if len(self.memory) < 64:
-            return #insufficient sample num
+            return #INFO insufficient sample num
 
         batch = random.sample(self.memory, 64)
         states, actions, rewards, next_states, dones = zip(*batch) # actions is currently not used. Check if this is right or wrong
@@ -369,7 +382,7 @@ def run_model():
     print(f"Generated glayout code saved to {glayout_file}")
 
 
-# train_rl_model(100) # Placeholder for number of episodes to train the model
+# INFO train_rl_model(100) # Placeholder for number of episodes to train the model
 
 """
 Todo: 
@@ -378,7 +391,6 @@ Todo:
         action space
         context files
         google cloud machine setup/running
-        gds file generation
        
         # Comments are things that need to be checked/fixed
 """

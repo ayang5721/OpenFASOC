@@ -28,7 +28,6 @@ class Enforcer:
         drc_error_output = drcTester.run_drc(gds_file, cell_name, '../../../../common/drc-lvs-check/sky130A/sky130A.magicrc')
         return drc_error_output
     
-    #Edit this to accurately count DRC errors depending on how the DRC file is formatted
     def drc_num(self):
         self.errors = sum(1 for line in self.drc_error_output.splitlines() if 'DRC ERROR' in line)
         return self.drc_errors
