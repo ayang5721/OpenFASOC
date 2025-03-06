@@ -4,8 +4,8 @@
 from gdsfactory.pdk import Pdk
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from glayout.flow.pdk.sky130_mapped import sky130_mapped_pdk
-import subprocess
-import os
+from os import makedirs, path
+
 import drcTester
 import lvs
 
@@ -18,6 +18,13 @@ class Enforcer:
         self.lvs_error_output = ""
         self.pex_errors = 0
         self.pex_error_output = ""
+        
+
+    def syntax_report(self, syntax_errors):
+        if not path.exists('syntax_runs'):
+            makedirs('syntax_runs')
+
+        #FINISH THIS FUNC
         
 
     # EDIT ALL OF THE (ERROR)_NUM FUNCTIONS TO ACCURATELY COUNT THE NUMBER OF ERRORS IN THE OUTPUT FILE DEPENDING ON HOW THE REPORT FILES ARE FORMATTED    

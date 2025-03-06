@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import os
+import re
+import subprocess
 from datetime import datetime
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from enforcer import Enforcer
@@ -39,7 +41,7 @@ class Model:
 
         generated_code = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-        match = re.search(r"def\s+(\w+)\s*\[\s\S]*?pdk:\s+\w+", generated_code)
+        match = re.search(r"def\s+(\w+)\s*\(.*?pdk\s*:\s*\w+", generated_code)
         if match:
             function_name = match.group(1)
         else:
@@ -56,7 +58,7 @@ class Model:
 
         return generated_code
     
-    def generate_code(self, circuit, prompt):
+    def generate_modified_code(self, circuit, prompt):
         """
         Generates modified code based on an existing circuit and a prompt.
 
@@ -223,11 +225,22 @@ class CircuitEnvironment:
                 break
 
         self.generate_glayout(glayout_file, action)
+        gds_file = None
+
+        if not os.path.exists(glayout_file):
+            raise FileNotFoundError("Glayout file not found (step)")
+
+        
+        syntaxError = False
+        syntaxReport = None
 
         try:
             subprocess.run(['python',glayout_file], check=True)
-        except Exception as e:
-            raise ValueError(f"Error executing {glayout_file}: {e}")
+        except subprocess.CalledProcessError as e:
+            syntaxReport = e.output.decode("utf-8")
+            syntaxError = True
+            pass
+
         
 
         with open(glayout_file, "r", encoding = "utf-8") as f:
@@ -237,14 +250,21 @@ class CircuitEnvironment:
                     break
         
         if gds_file is None:
-            raise ValueError("GDS file not found (step)")
+            syntaxReport.append("GDS file not found")
+            syntaxError = True
+            pass
 
 
         """
         The drc/lvs/pex reports will be used as step by step context for the model to learn from
         This type of context needs to be implemented after initial pure-reward training so the model can first stabilize and avoid training errors
         Find a way to do this - gpt
+
+        Find a way to include syntax error report as the most important error checkers since a syntax error is the most crucial error
         """
+        if(syntaxError):
+            syntax_report = self.enforcer.syntax_report(syntaxReport)
+
         drc_report = self.enforcer.enforce_drc(gds_file, f"DRC_{glayout_file.replace('.py', '.rpt')}")
         drc_errors = self.enforcer.drc_num()
 
@@ -311,8 +331,8 @@ def train_rl_model(episodes):
     environment = CircuitEnvironment()
     episodes = environment.episode
 
-    input (f"Do you want to reset episodes to 0? Currently episodes are {episodes}. Enter 'y' to reset or any other key to continue: ")
-    if input == 'y':
+    user_input = input (f"Do you want to reset episodes to 0? Currently episodes are {episodes}. Enter 'y' to reset or any other key to continue: ")
+    if user_input.lower() == 'y':
         episodes = 0
 
     for episode in range(episodes):
@@ -358,7 +378,7 @@ def run_model():
     else:
         with open(circuit, "r") as f:
             circuit_code = f.read()
-        glayout_code = environment.agent.generate_code(circuit_code, prompt)
+        glayout_code = environment.agent.generate_modified_code(circuit_code, prompt)
 
     name = input("Enter a name for the circuit or enter 1 to auto name: ")
     while True:
