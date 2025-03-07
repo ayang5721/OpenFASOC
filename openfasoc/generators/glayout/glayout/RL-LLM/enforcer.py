@@ -8,6 +8,7 @@ from os import makedirs, path
 
 import drcTester
 import lvs
+#Edit these to append the error reports with "-------" in between to save all error reports over time
 
 
 class Enforcer:
@@ -23,6 +24,13 @@ class Enforcer:
     def syntax_report(self, syntax_errors):
         if not path.exists('syntax_runs'):
             makedirs('syntax_runs')
+
+        with open('syntax_runs/syntax_report.txt', 'a') as f:
+            f.write(syntax_errors)
+            f.write('\n------------\n')
+
+        return 'syntax_runs/syntax_report.txt'
+        
 
         #FINISH THIS FUNC
         

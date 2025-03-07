@@ -6,6 +6,7 @@ import numpy as np
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from enforcer import Enforcer
@@ -35,7 +36,33 @@ class Model:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
 
-    def generate_code(self, prompt):
+    def generate_code(self, prompt, drc_report = None, lvs_report = None, pex_report = None, syntax_report = None):
+    
+
+        #Move all of this to CircuitEnvironment.step() Have error context contain error num and error type/report.
+        # Context files are needed to be able to fix past errors and understand why they happened.
+        # Implement a way to not use error reports until later episodes to avoid training errors
+        error_context = ""
+        """
+        if drc_report:
+            error_context += f"\nDRC Issues: \n{drc_report}\n"
+        if lvs_report:
+            error_context += f"\nLVS Issues: \n{lvs_report}\n"
+        if pex_report:
+            error_context += f"\nPEX Issues: \n{pex_report}\n"
+        if syntax_report:
+            error_context += f"\nSyntax Issues: \n{syntax_report}\n"
+        """
+
+
+
+        full_prompt = f"""
+        Generate a circuit based on the following prompt: '{prompt}'
+
+        Previos error reports:
+        {error_context}
+        """
+
         inputs = self.tokenizer(prompt, return_tensors="pt")
         outputs = self.model.generate(**inputs, max_length=500)
 
@@ -58,7 +85,7 @@ class Model:
 
         return generated_code
     
-    def generate_modified_code(self, circuit, prompt):
+    def generate_modified_code(self, circuit, prompt, drc_report = None, lvs_report = None, pex_report = None, syntax_report = None):
         """
         Generates modified code based on an existing circuit and a prompt.
 
@@ -212,8 +239,8 @@ class CircuitEnvironment:
 
         return {
             "operation": operation[action_index % len(operation)],
-            "component": component[(action_index // len(operation)) % len(component)],
-            "parameter": parameter[(action_index // (len(operation) * len(component))) % len(parameter)],
+            "component": component[action_index % len(component)],
+            "parameter": parameter[action_index % len(parameter)],
             "value": value
         }    
     
@@ -232,14 +259,13 @@ class CircuitEnvironment:
 
         
         syntaxError = False
-        syntaxReport = None
+        syntaxReport = []
 
         try:
-            subprocess.run(['python',glayout_file], check=True)
+            result = subprocess.run([sys.executable, glayout_file], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            syntaxReport = e.output.decode("utf-8")
+            syntaxReport.append(e.stderr)
             syntaxError = True
-            pass
 
         
 
@@ -252,7 +278,6 @@ class CircuitEnvironment:
         if gds_file is None:
             syntaxReport.append("GDS file not found")
             syntaxError = True
-            pass
 
 
         """
@@ -263,7 +288,8 @@ class CircuitEnvironment:
         Find a way to include syntax error report as the most important error checkers since a syntax error is the most crucial error
         """
         if(syntaxError):
-            syntax_report = self.enforcer.syntax_report(syntaxReport)
+            syntax_report = self.enforcer.syntax_report("\n".join(syntaxReport))
+            # Should a syntax error auto terminate step with very bad reward score?
 
         drc_report = self.enforcer.enforce_drc(gds_file, f"DRC_{glayout_file.replace('.py', '.rpt')}")
         drc_errors = self.enforcer.drc_num()
@@ -373,16 +399,16 @@ def run_model():
     circuit = input("Enter the path to the existing circuit code or enter n to not edit an existing circuit: ")
     prompt = input("Enter a prompt: ")
 
-    if circuit == "n":
+    if circuit.lower() == "n":
         glayout_code = environment.agent.generate_code(prompt)
     else:
         with open(circuit, "r") as f:
             circuit_code = f.read()
         glayout_code = environment.agent.generate_modified_code(circuit_code, prompt)
 
-    name = input("Enter a name for the circuit or enter 1 to auto name: ")
+    name = input("Enter a name for the circuit or enter n to auto name: ")
     while True:
-        if name == 1:
+        if name.lower() == 'n':
             time = datetime.now().strftime("%Y%m%d_%H%M%S")
             glayout_file = f"{glayout_output_folder}/circuit_{time}.py"
             if not os.path.exists(glayout_file):
@@ -407,10 +433,17 @@ def run_model():
 """
 Todo: 
 
+        3/7
+
+        ***
+        Fix the error reports as context (comments left in Model.generate_code())
+        Fix enforcer (drc/lvs/pex files dont work ask harsh)
+            Have errors append w/ "-------" in between to save all error reports over time
+        ***
 
         action space
-        context files
         google cloud machine setup/running
+
        
         # Comments are things that need to be checked/fixed
 """
