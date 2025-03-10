@@ -20,6 +20,8 @@ class Enforcer:
         self.pex_errors = 0
         self.pex_error_output = ""
         
+        
+
 
     def syntax_report(self, syntax_errors):
         if not path.exists('syntax_runs'):

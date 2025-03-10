@@ -8,6 +8,12 @@ import re
 import subprocess
 import sys
 import time
+
+import circuitContext
+import glayoutContext
+
+import trainingCircuit #change this to the example circuit
+
 from datetime import datetime
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from enforcer import Enforcer
@@ -37,37 +43,7 @@ class Model:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
 
-    def generate_code(self, prompt, drc_report = None, lvs_report = None, pex_report = None, syntax_report = None):
-    
-
-        full_prompt = f"""
-        Generate a circuit based on the following prompt: '{prompt}'
-        """
-
-        # prompt vs full_prompt for input
-        inputs = self.tokenizer(prompt, return_tensors="pt")
-        outputs = self.model.generate(**inputs, max_length=500)
-
-        generated_code = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-        match = re.search(r"def\s+(\w+)\s*\(.*?pdk\s*:\s*\w+", generated_code)
-        if match:
-            function_name = match.group(1)
-        else:
-            raise ValueError("Function name not found in generated code (Model.generate_code)")
-
-        required_line = [
-            "from glayout.flow.pdk.sky130_mapped import sky130_mapped_pdk",
-            f"{function_name}_cell.write_gds('{function_name}.gds')"
-        ]
-
-        if ".write_gds" not in generated_code:
-            generated_code += "\n" + "\n".join(required_line)
-
-
-        return generated_code
-    
-    def generate_modified_code(self, circuit, prompt, drc_report = None, lvs_report = None, pex_report = None, syntax_report = None):
+    def generate_modified_code(self, circuit, prompt):
         """
         Generates modified code based on an existing circuit and a prompt.
 
@@ -80,6 +56,11 @@ class Model:
         """
         full_prompt = f"""
         Modify the following circuit code based on this instruction: '{prompt}'
+
+        with the following context:
+        circuit context: {circuitContext}
+        glayout context: {glayoutContext}
+
 
         Circuit Code:
         {circuit}
@@ -141,10 +122,13 @@ class CircuitEnvironment:
         self.state_size = 10 # Placeholder for the number of parameters in the state
         self.action_size = 10 # Placeholder for the number of actions
 
+        self.circuit = None
+
         self.q_network = QNetwork(self.state_size, self.action_size)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=0.001)
 
         self.epsilon, self.episode = self.agent.load_checkpoint(self.q_network, self.optimizer)
+        self.phase = 0
 
         self.memory = deque(maxlen=1000)
         self.epsilon = 0.1
@@ -159,13 +143,6 @@ class CircuitEnvironment:
 
     def reset(self):
         
-        self.state = np.random.rand(10)
-        """
-         the 10 represents 10 dimension vector (each dimension is a parameter such as width)
-         This has to be changed to some sort of list that has parameters WITH VALUES
-        Right now the random is a placeholder for states
-        """
-
         #Check to make sure this is correct state
         self.state = {
             "nmos_width": 1,
@@ -218,7 +195,6 @@ class CircuitEnvironment:
         #Change this so the LLM decides value, not randomness
         value = np.random.uniform(-1.0, 1.0)
 
-
         return {
             "operation": operation[action_index % len(operation)],
             "component": component[action_index % len(component)],
@@ -226,23 +202,21 @@ class CircuitEnvironment:
             "value": value
         }    
     
+
+    
     def step(self, action):
+
         while True:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            glayout_file = f"{self.glayout_output_folder}/circuit_{timestamp}.py"
+            glayout_file = f"{self.glayout_output_folder}/circuit_{self.episode}/{self.phase}.py"
+            phase += 1
             if not os.path.exists(glayout_file):
                 break
-            else:
-                time.sleep(1)
-
-
         
         self.generate_glayout(glayout_file, action)
         gds_file = None
 
         if not os.path.exists(glayout_file):
             raise FileNotFoundError("Glayout file not found (step)")
-
         
         syntaxError = False
         syntaxReport = []
@@ -250,10 +224,9 @@ class CircuitEnvironment:
         try:
             result = subprocess.run([sys.executable, glayout_file], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            syntaxReport.append(e.stderr)
             syntaxError = True
+            syntaxReport = e.stderr.splitlines()
 
-        
 
         with open(glayout_file, "r", encoding = "utf-8") as f:
             for line in reversed(list(f)):
@@ -262,17 +235,10 @@ class CircuitEnvironment:
                     break
         
         if gds_file is None:
-            syntaxReport.append("GDS file not found")
             syntaxError = True
+            syntaxReport.append("GDS file not found")
 
 
-        """
-        The drc/lvs/pex reports will be used as step by step context for the model to learn from
-        This type of context needs to be implemented after initial pure-reward training so the model can first stabilize and avoid training errors
-        Find a way to do this - gpt
-
-        Find a way to include syntax error report as the most important error checkers since a syntax error is the most crucial error
-        """
         if(syntaxError):
             syntax_report = self.enforcer.syntax_report("\n".join(syntaxReport))
             # Should a syntax error auto terminate step with very bad reward score?
@@ -285,22 +251,6 @@ class CircuitEnvironment:
 
         lvs_report = self.enforcer.enforce_lvs(gds_file, f"LVS_{glayout_file.replace('.py', '.rpt')}")
         lvs_errors = self.enforcer.lvs_num()
-
-        """
-        #Have error context contain error num and error type/report.
-        # Context files are needed to be able to fix past errors and understand why they happened.
-        # Implement a way to not use error reports until later episodes to avoid training errors
-        error_context = ""
-        
-        if drc_report:
-            error_context += f"\nDRC Issues: \n{drc_report}\n"
-        if lvs_report:
-            error_context += f"\nLVS Issues: \n{lvs_report}\n"
-        if pex_report:
-            error_context += f"\nPEX Issues: \n{pex_report}\n"
-        if syntax_report:
-            error_context += f"\nSyntax Issues: \n{syntax_report}\n"
-        """    
 
         # Weight errors if needed
         errors = drc_errors + lvs_errors + pex_errors
@@ -319,12 +269,8 @@ class CircuitEnvironment:
     def generate_glayout(self, glayout_file, action):
 
         prompt = f"generate a circuit for action {action}" 
-        """
-        This is a placeholder prompt that right now prompts for a complete circuit gneeration
-        Using a context file and training, this prompt should be changed so it can take prompts about existing circuits for cusotmization
-        """
-
-        glayout_code = self.agent.generate_code(prompt)
+       
+        glayout_code = self.agent.generate_modified_code(self.circuit, prompt)
         with open(glayout_file, "w") as f:
             f.write(glayout_code)
 
@@ -359,9 +305,12 @@ def train_rl_model(episodes):
     environment = CircuitEnvironment()
     episodes = environment.episode
 
+    environment.circuit = #circuit code
+
     user_input = input (f"Do you want to reset episodes to 0? Currently episodes are {episodes}. Enter 'y' to reset or any other key to continue: ")
     if user_input.lower() == 'y':
         episodes = 0
+        environment.episode = 0
 
     for episode in range(episodes):
         state = environment.reset()
@@ -398,15 +347,11 @@ def run_model():
     if not os.path.exists(glayout_output_folder):
         os.makedirs(glayout_output_folder, exist_ok=True)
     
-    circuit = input("Enter the path to the existing circuit code or enter n to not edit an existing circuit: ")
-    prompt = input("Enter a prompt: ")
+    circuit = input("Enter the path to the existing circuit code")
 
-    if circuit.lower() == "n":
-        glayout_code = environment.agent.generate_code(prompt)
-    else:
-        with open(circuit, "r") as f:
-            circuit_code = f.read()
-        glayout_code = environment.agent.generate_modified_code(circuit_code, prompt)
+    with open(circuit, "r") as f:
+        circuit_code = f.read()
+    glayout_code = environment.agent.generate_modified_code(circuit_code, prompt)
 
     name = input("Enter a name for the circuit or enter n to auto name: ")
     while True:
