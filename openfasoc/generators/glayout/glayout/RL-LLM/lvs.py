@@ -9,7 +9,7 @@ def run_pex(
     full_extraction: bool = False,
     flatten: bool = False,
     runs_dir_path: str = "pex_runs"
-) -> str:
+    ) -> str:
     """
     Runs PEX on a given GDS and returns the path to the extracted netlist.
     Arguments:
@@ -76,7 +76,7 @@ def run_lvs(
         cell_name: str,
         pdk_netgen_setup_file: str,
         runs_dir_path: str = "lvs_runs"
-) -> str:
+    ) -> str:
     """
     Runs LVS on a given schematic and an extracted netlist and returns the report text.
     Arguments:
