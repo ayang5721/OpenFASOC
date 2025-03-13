@@ -15,6 +15,7 @@ from collections import deque
 
 # INFO uncomment this line for a Syntax error so this file cannot run since it auto starts a very large gb download (starcoder LLM from huggingface)
 
+#Qnetwork class for the RL model
 class QNetwork(nn.Module):
     def __init__(self, state_size, action_size, hidden_size = 64):
         super(QNetwork, self).__init__()
@@ -32,7 +33,6 @@ class QNetwork(nn.Module):
 class Model:
     def __init__(self):
 
-        # find a way to make sure starcoder downloads to google cloud machine
         model_name = "bigcode/starcoder"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code = True, use_auth_token = True)
@@ -44,18 +44,20 @@ class Model:
         Generate a circuit based on the following prompt: '{prompt}'
         """
 
-        # prompt vs full_prompt for input
+        #Check if inputs shoulds be prompt vs full_prompt 
         inputs = self.tokenizer(prompt, return_tensors="pt")
         outputs = self.model.generate(**inputs, max_length=500)
 
         generated_code = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
+        #Searches the code for the function/cell name
         match = re.search(r"def\s+(\w+)\s*\(.*?pdk\s*:\s*\w+", generated_code)
         if match:
             function_name = match.group(1)
         else:
             raise ValueError("Function name not found in generated code (Model.generate_code)")
 
+        # Checks if code has the function for gds file generation and adds it if not
         required_line = [
             "from glayout.flow.pdk.sky130_mapped import sky130_mapped_pdk",
             f"{function_name}_cell.write_gds('{function_name}.gds')"
@@ -107,7 +109,9 @@ class Model:
         return generated_code
         
 
+
     def save_checkpoint(self, q_network, optimizer, epsilon, episode, filename="rl_checkpoint.pth"):
+        #Saves model and training values
         torch.save({
             'q_network_state_dict': q_network.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
@@ -117,6 +121,7 @@ class Model:
         print(f"Checkpoint saved to {filename}")
 
     def load_checkpoint(self, q_network, optimizer, filename="rl_checkpoint.pth"):
+        #loads model and training vals
         epsilon, episode = 0.1, 0
         if os.path.exists(filename):
             checkpoint = torch.load(filename)
@@ -166,7 +171,7 @@ class CircuitEnvironment:
         Right now the random is a placeholder for states
         """
 
-        #Check to make sure this is correct state
+        #Check to make sure this is correct state parameters and vals - default vals since this is reset function
         self.state = {
             "nmos_width": 1,
             "pmos_width": 1,
@@ -195,6 +200,7 @@ class CircuitEnvironment:
         return action
 
     def select_action(self, state):
+        #Picks action based on epsilon greedy policy - either picks random action (exploration) or best action (exploitation based on training)
         if random.random() <= self.epsilon:
             action = self.sample_action()
             if action['operation'] in ("add_dummy", "add_tie", "add_substrate_tap", "smart_route", "place"):
@@ -227,6 +233,8 @@ class CircuitEnvironment:
         }    
     
     def step(self, action):
+
+        #Names glayout files generated during training
         while True:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             glayout_file = f"{self.glayout_output_folder}/circuit_{timestamp}.py"
@@ -247,6 +255,8 @@ class CircuitEnvironment:
         syntaxError = False
         syntaxReport = []
 
+
+        #Runs glayout code since the code has the function for gds file generation
         try:
             result = subprocess.run([sys.executable, glayout_file], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
@@ -254,7 +264,7 @@ class CircuitEnvironment:
             syntaxError = True
 
         
-
+        # Finds the name of the gds file that is being generated
         with open(glayout_file, "r", encoding = "utf-8") as f:
             for line in reversed(list(f)):
                 if ".gds" in line:
@@ -269,7 +279,7 @@ class CircuitEnvironment:
         """
         The drc/lvs/pex reports will be used as step by step context for the model to learn from
         This type of context needs to be implemented after initial pure-reward training so the model can first stabilize and avoid training errors
-        Find a way to do this - gpt
+        Find a way to do this
 
         Find a way to include syntax error report as the most important error checkers since a syntax error is the most crucial error
         """
@@ -290,6 +300,8 @@ class CircuitEnvironment:
         #Have error context contain error num and error type/report.
         # Context files are needed to be able to fix past errors and understand why they happened.
         # Implement a way to not use error reports until later episodes to avoid training errors
+        
+        
         error_context = ""
         
         if drc_report:
@@ -329,10 +341,10 @@ class CircuitEnvironment:
             f.write(glayout_code)
 
     def optimize_model(self):
-        #Check this function with gpt, change this function to truly optimize (maybe using error reports?)
+        #Check this function; change this function to truly optimize (maybe using error reports?)
 
         if len(self.memory) < 64:
-            return #INFO insufficient sample num
+            return #INFO returns if insufficient sample num
 
         batch = random.sample(self.memory, 64)
         states, actions, rewards, next_states, dones = zip(*batch) # actions is currently not used. Check if this is right or wrong
@@ -356,9 +368,13 @@ class CircuitEnvironment:
 
 def train_rl_model(episodes):
 
+    #Trains model
+
+
     environment = CircuitEnvironment()
     episodes = environment.episode
 
+    # Resetting episodes will reset the amount of training iterations
     user_input = input (f"Do you want to reset episodes to 0? Currently episodes are {episodes}. Enter 'y' to reset or any other key to continue: ")
     if user_input.lower() == 'y':
         episodes = 0
@@ -430,24 +446,16 @@ def run_model():
     print(f"Generated glayout code saved to {glayout_file}")
 
 
-# INFO train_rl_model(100) # Placeholder for number of episodes to train the model
+#train_rl_model(100) # Placeholder for number of episodes to train the model
 
 """
 Todo: 
 
-        3/7
-
-        ***
-        Fix the error reports as context (comments left in Model.generate_code())
-        Fix enforcer (drc/lvs/pex files dont work ask harsh)
-            Have errors append w/ "-------" in between to save all error reports over time
-        ***
-
-        action space
-        google cloud machine setup/running
-
+        Context files needed for drc/lvs/pex, glayout, circutry
+        Action and state need to be completed - right now they are mostly placeholder values - need to be changed to glayout/circuit specific actions/states
+        Syntax error handling function in Enforcer.py needs to be completed
+        Implement a way to save all error reports for all time to keep track of progress etc
        
-        # Comments are things that need to be checked/fixed
 """
        
 

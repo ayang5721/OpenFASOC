@@ -8,8 +8,6 @@ from os import makedirs, path
 
 import drcTester
 import lvs
-#Edit these to append the error reports with "-------" in between to save all error reports over time
-
 
 class Enforcer:
     def __init__(self):
@@ -34,7 +32,7 @@ class Enforcer:
         return 'syntax_runs/syntax_report.txt'
         
 
-        #FINISH THIS FUNC
+        #finish this function to capture syntax errors and return them
         
 
     # EDIT ALL OF THE (ERROR)_NUM FUNCTIONS TO ACCURATELY COUNT THE NUMBER OF ERRORS IN THE OUTPUT FILE DEPENDING ON HOW THE REPORT FILES ARE FORMATTED    

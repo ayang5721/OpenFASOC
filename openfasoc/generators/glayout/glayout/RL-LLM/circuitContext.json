@@ -1,0 +1,8 @@
+/*
+Comments:
+
+This is a context file for circutry knowledge that has yet to be worked on.
+The drc/lvs/pex error reports will output errors that will likely require circutry knowledge to fix
+Understanding basic circutry via this context file will allow the LLM to more easily understand/fix errors, understand prompts, and make more accurate circuits
+
+*/

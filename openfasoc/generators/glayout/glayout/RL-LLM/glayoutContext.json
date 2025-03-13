@@ -1,3 +1,5 @@
+// This file is currently not in JSON format. This file should contain information about the functions of the Glayout library so LLM can code using glayout functions
+
 Glayout is a Python library designed for the procedural generation and modification of electrical circuit layouts. It provides a suite of functions for defining components and manipulating component properties.
 
 
