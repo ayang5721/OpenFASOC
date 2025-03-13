@@ -1,0 +1,31 @@
+// This file is currently not in JSON format. This file should contain information about the functions of the Glayout library so LLM can code using glayout functions
+
+Glayout is a Python library designed for the procedural generation and modification of electrical circuit layouts. It provides a suite of functions for defining components and manipulating component properties.
+
+
+# create a PMOS
+pmos = pmos(pdk, width, fingers, multipliers, with_tie, dnwell, with_dummy, with_substrate_tap, length, sd_route_topmet, gate_route_topmet, sd_route_left, rmult, sd_rmult, gate_rmult, interfinger_rmult, tie_layers, substrate_tap_layers, dummy_routes)
+"""
+parameters:
+    pdk: mapped pdk to use
+    width: (float) expands the PMOS in the y direction
+    fingers: introduces additional fingers (sharing source/drain) of width=width
+    multipliers: number of multipliers (a multiplier is a row of fingers)
+    with_tie: true or false, specfies if a bulk tie is required
+    dnwell: bool use dnwell if True, or use nwell if False
+    with_dummy: tuple(bool,bool) or bool specifying both sides dummy or neither side dummy
+    with_substrate_tap: add substrate tap on the very outside perimeter of pmos
+    length: if None or below min_length will default to min_length
+    sd_route_topmet: specify top metal glayer for the source/drain route
+    gate_route_topmet: specify top metal glayer for the gate route
+    sd_route_left: specify if the source/drain inter-multiplier routes should be on the left side or right side (if false)
+    rmult: if not None overrides all other multiplier options to provide a simple routing multiplier (int only)
+    sd_rmult: mulitplies the thickness of the source drain route (int only)
+    gate_rmult: add additional via rows to the gate route via array (int only)
+    interfinger_rmult: multiplies the thickness of the metal routes between the fingers (int only)
+    tie_layers: tuple[str,str] specifying (horizontal glayer, vertical glayer) or well tie ring. default=("met2","met1")
+    substrate_tap_layers: tuple[str,str] specifying (horizontal glayer, vertical glayer) or substrate tap ring. default=("met2","met1")
+    dummy_routes: bool default=True, if true add add vias and short dummy poly,source,drain
+"""
+
+
